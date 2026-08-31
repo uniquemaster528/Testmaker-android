@@ -124,6 +124,7 @@
       padding: 1px 6px;
       border: 1px solid #b3541e
     }
+    #overlay,#overlay *,#main{user-select:none;-webkit-user-select:none}
 
     #badge {
       position: fixed;
@@ -604,6 +605,7 @@
     let lpTimer = null, lpPos = null;
     function cancelLP() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
     overlay.addEventListener('pointerdown', e => {
+      e.preventDefault();
       lpPos = [e.clientX, e.clientY];
       cancelLP();
       lpTimer = setTimeout(() => { lpTimer = null; longPress(lpPos); }, 900);
