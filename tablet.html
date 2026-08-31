@@ -347,7 +347,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     /* ================= MOTOR ================= */
-    const MAP = { 'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D', 'e': 'E', 'Ç': 'C', 'ç': 'C', 'G': 'C', 'g': 'C', '(': 'C', '‹': 'C', '[': 'C' };
+    const MAP = { 'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D', 'e': 'E', 'Ç': 'C', 'ç': 'C', 'G': 'C', 'g': 'C', '(': 'C', '‹': 'C', '[': 'C', '0': 'C' };
     const PUNCT = ').:）．：';
     function mergeSplit(tokens) {
       const punct = tokens.filter(t => { const s = t.text.trim(); return s && PUNCT.includes(s[0]); });

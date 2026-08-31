@@ -1,0 +1,10 @@
+Keep this file and signing.keystore in a safe place. You'll need these files if you want to upload future versions of your PWA to the Google Play Store.
+
+Key store file: signing.keystore
+Key store password: W26SoKfLAmRH
+Key alias: my-key-alias
+Key password: W26SoKfLAmRH
+Signer's full name: DijitalOptik Admin
+Signer's organization: Dijital Optik — Akıllı Test Çözücü
+Signer's organizational unit: Engineering
+Signer's country code: US
