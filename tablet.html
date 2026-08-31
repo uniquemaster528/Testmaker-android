@@ -625,20 +625,42 @@
     overlay.addEventListener('pointerup', cancelLP);
     overlay.addEventListener('pointercancel', cancelLP);
     overlay.addEventListener('contextmenu', e => e.preventDefault());
-    function longPress(pos) {
-      const q = prompt('Soru numarası:'); if (!q) return;
-      const ch = prompt('Harf (A-E):'); if (!ch) return;
-      jsonData[curPage - 1].choices.push({ char: ch.toUpperCase(), x: pos[0] / curScale, y: pos[1] / curScale, w: 12, h: 12, parent_question: +q, estimated: true, manual: true });
-      saveSession(); go(curPage);
-    }
+    let pendingPos = null;
+      function longPress(pos) {
+        pendingPos = pos;
+        $('modal').style.display = 'flex';
+        $('modalCard').innerHTML = `<h2>➕ Şık Ekle</h2>
+  <div class="row">
+    <input id="addQ" inputmode="numeric" placeholder="Soru №" style="flex:1;padding:10px;border-radius:10px;border:1px solid #333;background:#121417;color:#eee">
+    <input id="addCh" placeholder="A-E" maxlength="1" style="width:80px;padding:10px;border-radius:10px;border:1px solid #333;background:#121417;color:#eee;text-align:center">
+  </div>
+  <div class="row"><button onclick="confirmAdd()">➕ Ekle</button>
+  <button onclick="closeModal()" style="background:#444">Vazgeç</button></div>`;
+        setTimeout(() => { const i = $('addQ'); if (i) i.focus(); }, 80);
+      }
+      function confirmAdd() {
+        const q = parseInt($('addQ').value), ch = ($('addCh').value || '').toUpperCase();
+        if (!q || !'ABCDE'.includes(ch)) { flash('Soru № ve A-E harf gir'); return; }
+        jsonData[curPage - 1].choices.push({
+          char: ch, x: pendingPos[0] / curScale, y: pendingPos[1] / curScale,
+          w: 12, h: 12, parent_question: q, estimated: true, manual: true
+        });
+        closeModal(); saveSession(); go(curPage);
+      }
     function longDelete() {
         if (!lpTarget) return;
         const q = +lpTarget.dataset.q, ch = lpTarget.dataset.ch;
-        if (!confirm(`Soru ${q} — ${ch} şıkkı silinsin mi?`)) return;
+        $('modal').style.display = 'flex';
+        $('modalCard').innerHTML = `<h2>🗑 Şık Sil</h2>
+  <p style="color:#9ab">Soru <b>${q}</b> — <b>${ch}</b> şıkkı silinsin mi?</p>
+  <div class="row"><button onclick="confirmDel(${q},'${ch}')" style="background:#e74c3c">🗑 Sil</button>
+  <button onclick="closeModal()" style="background:#444">Vazgeç</button></div>`;
+      }
+      function confirmDel(q, ch) {
         const pd = jsonData[curPage - 1];
         pd.choices = pd.choices.filter(c => !(c.parent_question === q && c.char === ch));
         if (userAnswers[q] === ch) delete userAnswers[q];
-        saveSession(); go(curPage);
+        closeModal(); saveSession(); go(curPage);
       }
     function refreshSelection() {
       for (const b of overlay.children) {
@@ -978,7 +1000,7 @@ Yalnızca geçerli bir JSON nesnesi döndür: {"1":"E","2":"B","28":"C"}`;
     window.addEventListener('offline', () => flash('🔌 Çevrimdışı: kitaplar açık, AI kapalı'));
     window.addEventListener('online', () => flash('🌐 Bağlantı geri geldi'));
 
-    const APP_SURUM = 'v2.2';
+    const APP_SURUM = 'v2.3';
       refreshLib();
       initTicker();
       updateTimerText();
