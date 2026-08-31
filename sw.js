@@ -1,4 +1,4 @@
-const CACHE='dijitaloptik-v2';
+const CACHE='dijitaloptik-v3';
 const CORE=['./tablet.html','./index.html','./manifest.json','./icon.svg','./icon-512.png'];
 
 self.addEventListener('install',e=>{
@@ -14,10 +14,10 @@ self.addEventListener('activate',e=>{
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET')return;
 
-  /* Sayfa gezintisi: önce ağ (güncellik), düşerse önbellek (offline) */
+  /* Sayfa: ASLA önbellekten bayat çekme (no-store), düşerse offline kopya */
   if(e.request.mode==='navigate'){
     e.respondWith(
-      fetch(e.request).then(r=>{
+      fetch(e.request,{cache:'no-store'}).then(r=>{
         const copy=r.clone();
         caches.open(CACHE).then(c=>c.put('./tablet.html',copy));
         return r;
@@ -26,7 +26,7 @@ self.addEventListener('fetch',e=>{
     return;
   }
 
-  /* Diğer her şey (pdf.js CDN dahil): önce önbellek, yoksa ağ+doldur */
+  /* pdf.js CDN vb.: önce önbellek, yoksa ağ+doldur */
   e.respondWith(
     caches.match(e.request).then(hit=>
       hit || fetch(e.request).then(r=>{

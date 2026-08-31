@@ -978,9 +978,11 @@ Yalnızca geçerli bir JSON nesnesi döndür: {"1":"E","2":"B","28":"C"}`;
     window.addEventListener('offline', () => flash('🔌 Çevrimdışı: kitaplar açık, AI kapalı'));
     window.addEventListener('online', () => flash('🌐 Bağlantı geri geldi'));
 
-    refreshLib();
-    initTicker();
-    updateTimerText();
+    const APP_SURUM = 'v2.2';
+      refreshLib();
+      initTicker();
+      updateTimerText();
+      flash('✅ DijitalOptik ' + APP_SURUM, 3000);
   </script>
 </body>
 
