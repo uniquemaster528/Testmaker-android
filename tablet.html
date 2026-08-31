@@ -569,7 +569,7 @@
         b.textContent = c.char;
         b.dataset.q = q; b.dataset.ch = c.char;
         b.onclick = () => {
-          if (lockedQs.has(q)) return;
+          if (suppressClick) { suppressClick = false; return; } if (lockedQs.has(q)) return;
           if (userAnswers[q] === c.char) delete userAnswers[q]; else userAnswers[q] = c.char;
           saveSession(); refreshSelection(); refreshEval();
         };
@@ -604,13 +604,19 @@
     /* --- uzun bas: eksik şık ekle --- */
     let lpTimer = null, lpPos = null;
     function cancelLP() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
-    overlay.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      const r = overlay.getBoundingClientRect();
-      lpPos = [e.clientX - r.left, e.clientY - r.top];
-      cancelLP();
-      lpTimer = setTimeout(() => { lpTimer = null; longPress(lpPos); }, 900);
-    });
+  let lpMode = 'add', lpTarget = null, suppressClick = false;
+  overlay.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const r = overlay.getBoundingClientRect();
+    lpPos = [e.clientX - r.left, e.clientY - r.top];
+    lpTarget = e.target.closest ? e.target.closest('.hitbox') : null;
+    lpMode = lpTarget ? 'del' : 'add';
+    cancelLP();
+    lpTimer = setTimeout(() => {
+      lpTimer = null; suppressClick = true; setTimeout(() => suppressClick = false, 600);
+      if (lpMode === 'del') longDelete(); else longPress(lpPos);
+    }, 900);
+  });
     overlay.addEventListener('pointermove', e => {
       if (!lpTimer || !lpPos) return;
       const r = overlay.getBoundingClientRect();
@@ -625,6 +631,15 @@
       jsonData[curPage - 1].choices.push({ char: ch.toUpperCase(), x: pos[0] / curScale, y: pos[1] / curScale, w: 12, h: 12, parent_question: +q, estimated: true, manual: true });
       saveSession(); go(curPage);
     }
+    function longDelete() {
+        if (!lpTarget) return;
+        const q = +lpTarget.dataset.q, ch = lpTarget.dataset.ch;
+        if (!confirm(`Soru ${q} — ${ch} şıkkı silinsin mi?`)) return;
+        const pd = jsonData[curPage - 1];
+        pd.choices = pd.choices.filter(c => !(c.parent_question === q && c.char === ch));
+        if (userAnswers[q] === ch) delete userAnswers[q];
+        saveSession(); go(curPage);
+      }
     function refreshSelection() {
       for (const b of overlay.children) {
         b.classList.toggle('selected', userAnswers[+b.dataset.q] === b.dataset.ch);
