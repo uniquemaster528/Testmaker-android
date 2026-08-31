@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Dijital Optik — Tablet</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1c2026">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:system-ui,sans-serif;background:#121417;color:#eee;display:flex;flex-direction:column;height:100vh}
+  header{display:flex;align-items:center;gap:8px;padding:8px;background:#1c2026;flex-wrap:wrap}
+  header button,header select{font-size:15px;padding:10px 14px;border:0;border-radius:10px;background:#2d333c;color:#eee;cursor:pointer}
+  #main{flex:1;overflow:auto;position:relative;padding:6px}
+  #wrap{position:relative;margin:0 auto}
+  canvas{display:block;width:100%}
+  #overlay{position:absolute;inset:0}
+  .hitbox{position:absolute;border:2px solid rgba(64,150,255,.9);border-radius:8px;background:rgba(64,150,255,.12);
+    color:#cfe4ff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;user-select:none}
+  .hitbox.selected{border-color:#2ecc71;background:rgba(46,204,113,.35);color:#eafff3}
+  .hitbox.estimated{border-style:dashed;border-color:#e67e22;color:#ffd9b0}
+  .hitbox.wrong{border-color:#e74c3c;background:rgba(231,76,60,.35);color:#ffe1de}
+  .hitbox.correct{border-color:#27ae60;background:rgba(39,174,96,.25);color:#eafff3}
+  .hitbox.locked{pointer-events:none;background:rgba(39,174,96,.8);border-color:#1e8449;color:#fff}
+  #badge{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#5a3a10;color:#ffd9b0;padding:8px 16px;border-radius:20px;display:none;z-index:60;max-width:90vw;text-align:center}
+  #pager{display:flex;gap:8px;justify-content:center;padding:8px;background:#1c2026}
+  #pager button{font-size:16px;padding:10px 18px;border:0;border-radius:10px;background:#2d333c;color:#eee}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:50}
+  #modal .card{background:#1c2026;border-radius:16px;padding:20px;width:min(560px,92vw);max-height:86vh;overflow:auto}
+  #modal h2{margin:0 0 10px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .chip{background:#3a2a2a;border:1px solid #e74c3c;border-radius:14px;padding:6px 12px;cursor:pointer}
+  textarea{width:100%;height:110px;background:#121417;color:#eee;border:1px solid #333;border-radius:10px;padding:8px}
+  .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .stat{font-size:20px;font-weight:800}
+  #ft{position:fixed;top:10px;right:10px;z-index:80;display:flex;align-items:center;gap:6px;
+    background:rgba(28,32,38,.92);border:1px solid #333;border-radius:14px;padding:8px 10px;
+    touch-action:none;user-select:none;-webkit-user-select:none;backdrop-filter:blur(4px)}
+  #ft button{border:0;background:#2d333c;color:#eee;border-radius:8px;padding:6px 10px;font-size:14px}
+  #ftTime{font-variant-numeric:tabular-nums;font-weight:800;color:#7ee2b8;min-width:74px;text-align:center;cursor:pointer}
+  #ft.warn #ftTime{color:#ff7b7b;animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.5}}
+  #ftBar{position:absolute;left:0;bottom:0;height:2px;background:#2ecc71;width:100%}
+  #ftDot{position:fixed;top:10px;right:10px;z-index:80;background:rgba(28,32,38,.9);
+    border:1px solid #333;border-radius:50%;width:40px;height:40px;align-items:center;justify-content:center;font-size:18px}
+</style>
+</head>
+<body>
+<header>
+  <button onclick="fileInput.click()">📄 PDF Seç</button>
+  <input type="file" id="fileInput" accept="application/pdf" hidden>
+  <select id="lib" onchange="loadBook(this.value)"><option value="">— Kitaplar —</option></select>
+  <button onclick="delBook()">🗑</button>
+  <button onclick="manualSave()">💾</button>
+  <span id="bookName" style="flex:1;min-width:80px;overflow:hidden;text-overflow:ellipsis"></span>
+  <button onclick="aiDrawer()">🤖</button>
+  <button onclick="settingsDrawer()">⚙️</button>
+  <button onclick="keyDrawer()">🔑 Anahtar</button>
+  <button onclick="finish()">🏁 Bitir</button>
+  <button onclick="toggleFS()">⛶</button>
+</header>
+<div id="main"><div id="wrap"><canvas id="cv"></canvas><div id="overlay"></div></div></div>
+<div id="pager">
+  <button onclick="go(curPage-1)">◀</button>
+  <span id="pageLabel" style="align-self:center"></span>
+  <button onclick="go(curPage+1)">▶</button>
+</div>
+<div id="badge"></div>
+<div id="ft">
+  <div id="ftBar"></div>
+  <span id="ftTime" onclick="timeDrawer()">00:00:00</span>
+  <button onclick="play()">▶</button>
+  <button onclick="pause()">⏸</button>
+  <button onclick="resetTimer()">↺</button>
+  <button onclick="hideFT()">👁</button>
+</div>
+<div id="ftDot" onclick="showFT()" style="display:none">⏱</div>
+<div id="modal"><div class="card" id="modalCard"></div></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ================= MOTOR ================= */
+const MAP={'A':'A','B':'B','C':'C','D':'D','E':'E','a':'A','b':'B','c':'C','d':'D','e':'E','Ç':'C','ç':'C','G':'C','g':'C','(':'C','‹':'C','[':'C'};
+const PUNCT=').:）．：';
+function mergeSplit(tokens){
+  const punct=tokens.filter(t=>{const s=t.text.trim();return s&&PUNCT.includes(s[0]);});
+  const used=new Set(),out=[];
+  for(const t of tokens){
+    const txt=t.text.trim();
+    if(txt.length===1&&MAP[txt]){
+      let best=null;
+      for(const p of punct){ if(used.has(p))continue; const g=p.x-(t.x+t.w);
+        if(Math.abs(p.y-t.y)<5&&g>=-2&&g<6){best=p;break;} }
+      if(best){used.add(best);out.push({...t,text:txt+best.text.trim(),w:Math.max(t.w,best.x-t.x+best.w)});continue;}
+    }
+    out.push(t);
+  }
+  return out;
+}
+function watermarkCols(tokens){
+  const singles=[];
+  for(const t of tokens){const s=t.text.trim();
+    if(s.length===1&&/[a-zA-ZçÇğĞıİöÖşŞüÜ]/.test(s)) singles.push([t.x,s.toUpperCase()]);}
+  singles.sort((a,b)=>a[0]-b[0]);
+  const cl=[];
+  for(const [x,ch] of singles){
+    if(cl.length&&x-cl[cl.length-1][1]<=6){cl[cl.length-1][1]=x;cl[cl.length-1][2].push(ch);}
+    else cl.push([x,x,[ch]]);
+  }
+  return cl.filter(c=>c[2].length>=3&&(c[2].some(k=>!'ABCDE'.includes(k))||new Set(c[2]).size<c[2].length))
+          .map(c=>[c[0],c[1]]);
+}
+const inLogo=(x,bad)=>bad.some(b=>b[0]-2<=x&&x<=b[1]+2);
+function buildOptions(tokens){
+  tokens=mergeSplit(tokens);
+  const bad=watermarkCols(tokens),opts=[];
+  for(const t of tokens){
+    const txt=t.text.trim(); if(!txt)continue;
+    const first=MAP[txt[0]]; if(!first)continue;
+    let ch=null;
+    if(txt.length===1){ if(!inLogo(t.x,bad))ch=first; }
+    else if(PUNCT.includes(txt[1])||/\s/.test(txt[1])) ch=first;
+    if(ch) opts.push({char:ch,x:t.x,y:t.y,w:t.w,h:t.h});
+  }
+  return opts;
+}
+function clusterRows(opts,tol=8){
+  const by=[...opts].sort((a,b)=>a.y-b.y),rows=[];
+  for(const o of by){ if(rows.length&&Math.abs(rows[rows.length-1][0].y-o.y)<tol)rows[rows.length-1].push(o); else rows.push([o]); }
+  return rows;
+}
+const readingOrder=o=>{const out=[];for(const r of clusterRows(o))out.push(...[...r].sort((a,b)=>a.x-b.x));return out;};
+function computeSplitX(options,W){
+  const a=options.filter(o=>o.char==='A').sort((a,b)=>a.x-b.x);
+  if(a.length<2) return W;
+  const xs=a.map(o=>Math.round(o.x));
+  let best=0,ai=-1;
+  for(let i=0;i<xs.length-1;i++){const g=xs[i+1]-xs[i]; if(g>best){best=g;ai=i;}}
+  if(best<W*0.2) return W;
+  const lo=xs[ai],hi=xs[ai+1];
+  const inner=[...new Set(options.map(o=>Math.round(o.x)))].filter(x=>x>lo&&x<hi).sort((a,b)=>a-b);
+  const bounds=[lo,...inner,hi];
+  let bg=0,bm=(lo+hi)/2;
+  for(let i=0;i<bounds.length-1;i++){const g=bounds[i+1]-bounds[i]; if(g>bg){bg=g;bm=(bounds[i]+bounds[i+1])/2;}}
+  return bm;
+}
+function groupOptions(options,W){
+  if(!options.length)return[];
+  const s=computeSplitX(options,W);
+  const walk=opts=>{
+    if(!opts.length)return[];
+    const reading=readingOrder(opts);
+    const groups=[];let cur=[],last=null;
+    for(const o of reading){
+      if(o.char==='A'){if(cur.length)groups.push(cur);cur=[o];}
+      else if(!cur.length)cur=[o];
+      else if(o.char>last)cur.push(o);
+      else if(o.char===last){}
+      else{if(cur.length)groups.push(cur);cur=[o];}
+      last=o.char;
+    }
+    if(cur.length)groups.push(cur);
+    const res=[];
+    for(const g of groups){
+      const seen=new Set(),u=[];
+      for(const o of [...g].sort((a,b)=>a.char<b.char?-1:1)) if(!seen.has(o.char)){seen.add(o.char);u.push(o);}
+      if(u.length>=3)res.push(u);
+    }
+    return res;
+  };
+  return walk(options.filter(o=>o.x<s)).concat(walk(options.filter(o=>o.x>=s)));
+}
+function synthesizeMissing(g){
+  const chars=new Set(g.map(o=>o.char));
+  const missing='ABCDE'.split('').filter(c=>!chars.has(c));
+  if(missing.length!==1||g.length<3)return null;
+  const m=missing[0],rows=clusterRows(g),xs=g.map(o=>o.x);
+  if(Math.max(...xs)-Math.min(...xs)<=8){
+    const ys=[...g.map(o=>o.y)].sort((a,b)=>a-b);
+    const gaps=ys.slice(1).map((y,i)=>y-ys[i]);
+    const sp=Math.min(...gaps),xort=xs.reduce((a,b)=>a+b,0)/xs.length;
+    for(let i=0;i<ys.length-1;i++) if(ys[i+1]-ys[i]>1.7*sp) return{char:m,x:xort,y:(ys[i]+ys[i+1])/2,w:12,h:12,estimated:true};
+    if(m==='E')return{char:m,x:xort,y:ys[ys.length-1]+sp,w:12,h:12,estimated:true};
+    return null;
+  }
+  const r1=[...rows[0]].sort((a,b)=>a.x-b.x),r2=rows[1]?[...rows[1]].sort((a,b)=>a.x-b.x):[];
+  const c1=r1.map(o=>o.char).join(''),c2=r2.map(o=>o.char).join('');
+  const spx=r1.length>1?(r1[r1.length-1].x-r1[0].x)/(r1.length-1):70;
+  if(m==='C'&&c1==='AB'&&c2==='DE')return{char:m,x:r1[1].x+spx,y:r1[0].y,w:12,h:12,estimated:true};
+  if(m==='C'&&c1==='AB'&&c2==='D'&&rows.length===3)return{char:m,x:r1[0].x,y:r2[0].y,w:12,h:12,estimated:true};
+  if(m==='E'&&c1==='ABC'&&c2==='D')return{char:m,x:r2[0].x+spx,y:r2[0].y,w:12,h:12,estimated:true};
+  if(m==='E'&&c1==='AB'&&c2==='CD'){const spy=r2[0].y-r1[0].y;return{char:m,x:(r2[0].x+r2[1].x)/2,y:r2[0].y+spy,w:12,h:12,estimated:true};}
+  return null;
+}
+
+/* ================= UYGULAMA ================= */
+let pdfDoc=null,jsonData=[],curPage=1,curScale=1,book='',masterKey={},userAnswers={},elapsed=0,pdfBlob=null;
+let evaluated=false,lockedQs=new Set();
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),overlay=$('overlay');
+
+function flash(msg,ms=2500){const b=$('badge');if(!msg){b.style.display='none';return;}
+  b.textContent=msg;b.style.display='block';
+  clearTimeout(b._t);b._t=setTimeout(()=>{if(b.textContent===msg)b.style.display='none';},ms);}
+
+async function parseBook(pdf){
+  const data=[];let q=1;
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1});
+    const tc=await page.getTextContent();
+    const tokens=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>{
+      const tr=pdfjsLib.Util.transform(vp.transform,it.transform);
+      return{text:it.str,x:tr[4],y:tr[5]-(it.height||8),w:it.width||10,h:it.height||10};
+    });
+    const pd={page:p,choices:[]};
+    const options=buildOptions(tokens);
+    if(options.length){
+      for(const g of groupOptions(options,vp.width)){
+        const syn=synthesizeMissing(g); if(syn)g.push(syn);
+        for(const o of g){o.parent_question=q;pd.choices.push(o);}
+        q++;
+      }
+    }
+    data.push(pd);
+  }
+  return data;
+}
+
+$('fileInput').onchange=async e=>{
+  try{
+    const f=e.target.files[0]; if(!f)return;
+    flash('İşleniyor…',120000);
+    const buf=await f.arrayBuffer(); pdfBlob=buf;
+    pdfDoc=await pdfjsLib.getDocument({data:buf.slice(0)}).promise;
+    jsonData=await parseBook(pdfDoc);
+    book=f.name.replace(/\.pdf$/i,'');
+    const rec=await idbGet(book).catch(()=>null);
+    if(rec){ userAnswers=rec.userAnswers||{}; masterKey=rec.masterKey||{};
+      elapsed=rec.elapsed||0; duration=rec.duration||0; autoFinish=!!rec.autoFinish;
+      lockedQs=new Set(rec.locked||[]); }
+    else { masterKey={};userAnswers={};elapsed=0;duration=0;autoFinish=false;lockedQs=new Set(); }
+    evaluated=false; timeUpDone=false;
+    refreshLib(); initTicker(); updateTimerText();
+    flash(''); go(rec?(rec.lastPage||1):1); saveSession();
+  }catch(err){ flash('❌ '+err.message,10000); }
+};
+
+async function go(p){
+  if(!pdfDoc||p<1||p>pdfDoc.numPages)return;
+  curPage=p;
+  const page=await pdfDoc.getPage(p);
+  const base=page.getViewport({scale:1});
+  curScale=($('main').clientWidth-8)/base.width;
+  const vp=page.getViewport({scale:curScale});
+  cv.width=vp.width;cv.height=vp.height;
+  cv.style.width=vp.width+'px';cv.style.height=vp.height+'px';
+  $('wrap').style.width=vp.width+'px';
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  overlay.innerHTML='';
+  const chs=(jsonData[p-1]||{choices:[]}).choices;
+  if(!chs.length)flash('Bu sayfada şık bulunamadı',1500);
+  for(const c of chs){
+    const b=document.createElement('div');
+    const q=c.parent_question;
+    b.className='hitbox'+(c.estimated?' estimated':'');
+    if(userAnswers[q]===c.char)b.classList.add('selected');
+    if(lockedQs.has(q))b.classList.add('locked');
+    const w=Math.max(24,(c.w+2)*curScale),h=Math.max(24,(c.h+2)*curScale);
+    b.style.left=(c.x*curScale-2)+'px';b.style.top=(c.y*curScale-2)+'px';
+    b.style.width=w+'px';b.style.height=h+'px';
+    b.textContent=c.char;
+    b.dataset.q=q;b.dataset.ch=c.char;
+    b.onclick=()=>{ if(lockedQs.has(q))return;
+      if(userAnswers[q]===c.char)delete userAnswers[q]; else userAnswers[q]=c.char;
+      saveSession(); refreshSelection(); refreshEval(); };
+    overlay.appendChild(b);
+  }
+  refreshEval();
+  $('pageLabel').textContent=p+' / '+pdfDoc.numPages;
+}
+
+/* --- uzun bas: eksik şık ekle --- */
+let lpTimer=null,lpPos=null;
+function cancelLP(){ if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} }
+overlay.addEventListener('pointerdown',e=>{
+  lpPos=[e.clientX,e.clientY];
+  cancelLP();
+  lpTimer=setTimeout(()=>{lpTimer=null;longPress(lpPos);},900);
+});
+overlay.addEventListener('pointermove',e=>{
+  if(lpTimer&&lpPos&&(Math.abs(e.clientX-lpPos[0])>12||Math.abs(e.clientY-lpPos[1])>12))cancelLP();
+},{passive:true});
+overlay.addEventListener('pointerup',cancelLP);
+overlay.addEventListener('pointercancel',cancelLP);
+overlay.addEventListener('contextmenu',e=>e.preventDefault());
+function longPress(pos){
+  const q=prompt('Soru numarası:'); if(!q)return;
+  const ch=prompt('Harf (A-E):'); if(!ch)return;
+  jsonData[curPage-1].choices.push({char:ch.toUpperCase(),x:pos[0]/curScale,y:pos[1]/curScale,w:12,h:12,parent_question:+q,estimated:true,manual:true});
+  saveSession();go(curPage);
+}
+function refreshSelection(){
+  for(const b of overlay.children){
+    b.classList.toggle('selected', userAnswers[+b.dataset.q]===b.dataset.ch);
+  }
+}
+/* DÜZELTİLMİŞ boyama: sadece işaretli şık boyanır; yanlışsa doğrusu yeşil gösterilir */
+function refreshEval(){
+  for(const b of overlay.children){
+    const q=+b.dataset.q,ch=b.dataset.ch;
+    b.classList.remove('wrong','correct');
+    if(evaluated&&masterKey[q]&&userAnswers[q]){
+      if(ch===userAnswers[q]) b.classList.add(userAnswers[q]===masterKey[q]?'correct':'wrong');
+      else if(ch===masterKey[q]) b.classList.add('correct');
+    }
+  }
+}
+
+/* --- ODAK MODU (masaüstündeki Yanlışları Çöz mantığı) --- */
+function focusMistakes(){
+  lockedQs=new Set();
+  Object.keys(userAnswers).forEach(q=>{
+    if(masterKey[q]&&userAnswers[q]===masterKey[q]) lockedQs.add(+q);
+    else delete userAnswers[q];
+  });
+  evaluated=false;
+  closeModal(); go(curPage); saveSession();
+  flash('🔄 Odak Modu: yanlışlar sıfırlandı, doğrular kilitlendi');
+}
+function exitAnalysis(){
+  lockedQs=new Set(); evaluated=false;
+  closeModal(); go(curPage); saveSession();
+  flash('👁️ Analiz kapatıldı');
+}
+
+function toggleFS(){
+  if(document.fullscreenElement)document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+}
+document.addEventListener('fullscreenchange',()=>{if(pdfDoc)go(curPage);});
+window.addEventListener('resize',()=>{if(pdfDoc)go(curPage);});
+
+/* --- yana kaydırma --- */
+let tX=null,tY=null;
+$('main').addEventListener('touchstart',e=>{if(e.touches.length===1){tX=e.touches[0].clientX;tY=e.touches[0].clientY;}},{passive:true});
+$('main').addEventListener('touchend',e=>{
+  if(tX===null)return;
+  const dx=e.changedTouches[0].clientX-tX,dy=e.changedTouches[0].clientY-tY;tX=null;
+  if(Math.abs(dx)>70&&Math.abs(dy)<50){dx<0?go(curPage+1):go(curPage-1);}
+},{passive:true});
+
+/* --- anahtar + değerlendirme --- */
+function keyDrawer(){
+  $('modal').style.display='flex';
+  $('modalCard').innerHTML=`<h2>🔑 Cevap Anahtarı</h2>
+    <textarea id="keyTxt" placeholder="1.A 2.B 3.C ...">${Object.entries(masterKey).map(([k,v])=>k+'.'+v).join(' ')}</textarea>
+    <div class="row"><button onclick="applyKey()">✅ Uygula</button>
+    <button onclick="closeModal()" style="background:#444">Kapat</button></div>`;
+}
+function applyKey(){
+  const re=/(\d+)\s*[\)\.\-:]?\s*([A-Ea-e])/g;let m;masterKey={};
+  while((m=re.exec($('keyTxt').value)))masterKey[+m[1]]=m[2].toUpperCase();
+  saveSession();closeModal();
+}
+function finish(){
+  running=false;keepAwake(false);evaluated=true;refreshEval();
+  const allQ=new Set();jsonData.forEach(p=>p.choices.forEach(c=>allQ.add(c.parent_question)));
+  let d=0,y=0,b=0;const wrongs=[];
+  for(const q of [...allQ].sort((a,b)=>a-b)){
+    if(!userAnswers[q]){b++;continue;}
+    if(masterKey[q]){ if(userAnswers[q]===masterKey[q])d++; else {y++;wrongs.push(q);} }
+  }
+  const net=(d-y/4).toFixed(2);
+  $('modal').style.display='flex';
+  $('modalCard').innerHTML=`<h2>🏁 Sonuç</h2>
+    <div class="row"><span class="stat" style="color:#2ecc71">✔ ${d}</span>
+    <span class="stat" style="color:#e74c3c">✘ ${y}</span>
+    <span class="stat" style="color:#888">∅ ${b}</span>
+    <span class="stat" style="color:#7ee2b8">Net ${net}</span></div>
+    <h3>Odak Modu — yanlışların:</h3>
+    <div class="chips">${wrongs.map(q=>`<span class="chip" onclick="jumpQ(${q})">${q}</span>`).join('')||'Yanlış yok! 🎉'}</div>
+    <div class="row"><button onclick="focusMistakes()">🔄 Odak Modu (Yanlışları Çöz)</button>
+    <button onclick="exitAnalysis()" style="background:#444">👁️ Analizi Kapat</button>
+    <button onclick="closeModal()" style="background:#444">Kapat</button></div>`;
+}
+function jumpQ(q){
+  for(const p of jsonData){ const c=p.choices.find(c=>c.parent_question===q); if(c){closeModal();go(p.page);return;} }
+}
+function closeModal(){$('modal').style.display='none';}
+
+/* ================= FAZ 2: GEMINI REST + KASA ================= */
+const GKEY_LS='dijitaloptik_gemini_key';
+function settingsDrawer(){
+  $('modal').style.display='flex';
+  $('modalCard').innerHTML=`<h2>⚙️ Gemini API Anahtarı</h2>
+  <p style="color:#9ab">Anahtar yalnızca bu cihazda saklanır.</p>
+  <input id="gkey" type="password" style="width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#121417;color:#eee"
+    value="${localStorage.getItem(GKEY_LS)||''}" placeholder="AIza...">
+  <div class="row"><button onclick="localStorage.setItem(GKEY_LS,$('gkey').value.trim());closeModal();flash('✅ Anahtar kaydedildi')">💾 Kaydet</button>
+  <button onclick="closeModal()" style="background:#444">Kapat</button></div>`;
+}
+const AI_PROMPT=`Bu görsel bir sınav kitabı cevap anahtarı sayfasıdır.
+Cevaplar IZGARA/TABLO (numaralar yan yana, harfler hemen altında), liste ("1.A 2.B") veya açıklamalı ("Cevap A") biçiminde olabilir.
+Her numarayı doğru harfle eşleştir. Sayfada birden fazla blok (DENEME 1, DENEME 2...) varsa blokları ZİNCİRLE: sonraki bloğun ilk numarası = önceki bloğun son numarası + 1.
+Yalnızca geçerli bir JSON nesnesi döndür: {"1":"E","2":"B","28":"C"}`;
+const AI_MODELLER=['gemini-3.6-flash','gemini-3.7-flash','gemini-flash-latest'];
+async function geminiCall(key,model,b64){
+  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:AI_PROMPT},{inline_data:{mime_type:'image/png',data:b64}}]}]})
+  });
+  if(!res.ok)throw new Error(model+': '+res.status);
+  const j=await res.json();
+  return (j.candidates&&j.candidates[0].content.parts[0].text)||'';
+}
+async function pageBase64(p){
+  const page=await pdfDoc.getPage(p);
+  const vp=page.getViewport({scale:120/72});
+  const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;
+  await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  return c.toDataURL('image/png').split(',')[1];
+}
+function parseRange(t){
+  const out=[];
+  t.split(',').forEach(part=>{part=part.trim();if(!part)return;
+    if(part.includes('-')){const[a,b]=part.split('-').map(Number);for(let p=a;p<=b;p++)out.push(p);}
+    else out.push(+part);});
+  return out.filter(p=>p>=1&&p<=pdfDoc.numPages);
+}
+function aiDrawer(){
+  if(!pdfDoc){flash('Önce PDF aç');return;}
+  if(!localStorage.getItem(GKEY_LS)){settingsDrawer();return;}
+  $('modal').style.display='flex';
+  $('modalCard').innerHTML=`<h2>🤖 AI ile Cevap Anahtarı</h2>
+  <p style="color:#9ab">Sayfa aralığı: <b>5</b> • <b>5,6,7</b> • <b>104-106</b></p>
+  <input id="rangeTxt" style="width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#121417;color:#eee" placeholder="104-106">
+  <div id="aiStatus" style="margin-top:8px;color:#7ee2b8"></div>
+  <div class="row"><button onclick="readKeyPages()">🚀 Oku</button><button onclick="closeModal()" style="background:#444">Kapat</button></div>`;
+}
+async function readKeyPages(){
+  const pages=parseRange($('rangeTxt').value);
+  if(!pages.length){flash('Geçerli sayfa gir');return;}
+  const key=localStorage.getItem(GKEY_LS),st=$('aiStatus'),collected={};
+  for(const p of pages){
+    st.textContent=`Sayfa ${p} okunuyor…`;
+    const b64=await pageBase64(p);
+    let raw=null;
+    for(const m of AI_MODELLER){try{raw=await geminiCall(key,m,b64);break;}catch(e){raw=null;}}
+    if(!raw){st.textContent=`Sayfa ${p}: hata (kota/ağ?)`;continue;}
+    const match=raw.match(/\{[\s\S]*\}/);if(!match)continue;
+    let parsed;try{parsed=JSON.parse(match[0]);}catch(e){continue;}
+    const clean={};
+    for(const[k,v]of Object.entries(parsed)){
+      if(typeof v!=='string')continue;
+      const letters=[...v.toUpperCase()].filter(ch=>'ABCDE'.includes(ch));
+      const num=(String(k).match(/\d+/)||[])[0];
+      if(letters.length&&num)clean[+num]=letters[letters.length-1];
+    }
+    const have=Object.keys(collected).map(Number);
+    const mins=Math.min(...Object.keys(clean).map(Number));
+    if(have.length&&mins<=Math.max(...have)){
+      const off=Math.max(...have);
+      for(const[k,v]of Object.entries(clean))collected[off+ +k]=v;
+    }else Object.assign(collected,clean);
+  }
+  const n=Object.keys(collected).length;
+  if(n){Object.assign(masterKey,collected);saveSession();}
+  closeModal();flash(`🤖 ${n} cevap yüklendi`);
+}
+
+/* ================= KALICILIK: IndexedDB ================= */
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('dijitaloptik',1);
+  r.onupgradeneeded=e=>{const d=e.target.result;
+    if(!d.objectStoreNames.contains('books'))d.createObjectStore('books',{keyPath:'name'});};
+  r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e);});}
+function idbReq(mode,fn){return openDB().then(d=>new Promise((res,rej)=>{
+  const q=fn(d.transaction('books',mode).objectStore('books'));
+  q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);}));}
+const idbGet=n=>idbReq('readonly',s=>s.get(n));
+const idbAll=()=>idbReq('readonly',s=>s.getAll());
+const idbPut=v=>idbReq('readwrite',s=>s.put(v));
+const idbDel=n=>idbReq('readwrite',s=>s.delete(n));
+
+let saveT=null;
+function saveSession(){ if(!book)return; clearTimeout(saveT);
+  saveT=setTimeout(()=>{ idbPut({name:book, blob:pdfBlob, jsonData, userAnswers, masterKey,
+    elapsed, duration, autoFinish, locked:[...lockedQs], lastPage:curPage}).catch(()=>{}); },800); }
+function manualSave(){ saveSession(); flash('💾 İlerleme kaydedildi'); }
+
+async function refreshLib(){ const all=await idbAll();
+  $('lib').innerHTML='<option value="">— Kitaplar —</option>'+
+    all.map(b=>`<option ${b.name===book?'selected':''}>${b.name}</option>`).join(''); }
+
+async function loadBook(name){ if(!name)return;
+  try{
+    const rec=await idbGet(name); if(!rec)return;
+    book=name; pdfBlob=rec.blob; jsonData=rec.jsonData||[]; userAnswers=rec.userAnswers||{};
+    masterKey=rec.masterKey||{}; elapsed=rec.elapsed||0; duration=rec.duration||0;
+    autoFinish=!!rec.autoFinish; lockedQs=new Set(rec.locked||[]); evaluated=false; timeUpDone=false;
+    pdfDoc=await pdfjsLib.getDocument({data:pdfBlob.slice(0)}).promise;
+    $('bookName').textContent=book; refreshLib(); initTicker(); updateTimerText();
+    go(rec.lastPage||1);
+  }catch(err){ flash('❌ '+err.message,10000); }
+}
+async function delBook(){ if(!book)return; await idbDel(book);
+  book=''; pdfDoc=null; jsonData=[]; lockedQs=new Set(); evaluated=false; refreshLib(); flash('🗑 Kitap silindi'); }
+
+/* ================= YÜZEN SAAT ================= */
+let duration=0, autoFinish=false, running=false, tickId=null, timeUpDone=false, wakeLock=null;
+function fmt(s){s=Math.max(0,Math.floor(s));
+  return [Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');}
+function parseDur(t){const p=t.trim().split(':').map(Number);
+  if(!t.trim()||p.some(isNaN))return 0;
+  if(p.length===3)return p[0]*3600+p[1]*60+p[2];
+  if(p.length===2)return p[0]*60+p[1];
+  return p[0]*60;}
+function updateTimerText(){ const txt=duration>0?fmt(duration-elapsed):fmt(elapsed);
+  $('ftTime').textContent=txt;
+  $('ft').classList.toggle('warn',duration>0&&running&&(duration-elapsed)<60);
+  $('ftBar').style.width=duration>0?Math.max(0,100*(duration-elapsed)/duration)+'%':'100%'; }
+async function keepAwake(on){ try{
+  if(on&&'wakeLock' in navigator)wakeLock=await navigator.wakeLock.request('screen');
+  else if(wakeLock){wakeLock.release();wakeLock=null;} }catch(e){} }
+function initTicker(){ if(tickId)clearInterval(tickId); running=false;
+  tickId=setInterval(()=>{ if(!running)return; elapsed++;
+    updateTimerText();
+    if(duration>0&&duration-elapsed<=0&&!timeUpDone){timeUpDone=true;timeUp();}
+    if(elapsed%10===0)saveSession(); },1000); }
+function play(){ if(duration>0&&elapsed>=duration){elapsed=0;timeUpDone=false;}
+  running=true; keepAwake(true); updateTimerText(); saveSession(); }
+function pause(){ running=false; keepAwake(false); saveSession(); }
+function resetTimer(){ elapsed=0; running=false; timeUpDone=false; keepAwake(false); updateTimerText(); saveSession(); }
+function hideFT(){$('ft').style.display='none';$('ftDot').style.display='flex';}
+function showFT(){$('ft').style.display='flex';$('ftDot').style.display='none';}
+function timeUp(){ running=false; keepAwake(false);
+  if(autoFinish){ finish(); }
+  else{ $('modal').style.display='flex';
+    $('modalCard').innerHTML=`<h2>⏳ Süre doldu!</h2>
+    <div class="row"><button onclick="closeModal();finish()">🏁 Bitir ve sonucu göster</button>
+    <button onclick="closeModal()" style="background:#444">Devam et</button></div>`; } }
+function timeDrawer(){
+  $('modal').style.display='flex';
+  $('modalCard').innerHTML=`<h2>⏱️ Süre Ayarı</h2>
+  <p style="color:#9ab">Rakamları yaz, noktaları ben koyarım. <b>25</b> = 25 dk • <b>25:00</b> = 25 dk • <b>1:30:00</b> = 1,5 saat.</p>
+  <input id="durTxt" inputmode="numeric" style="width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#121417;color:#eee"
+    value="${duration>0?fmt(duration):''}" placeholder="25:00">
+  <label style="display:flex;gap:8px;align-items:center;margin-top:10px">
+  <input type="checkbox" id="afChk" ${autoFinish?'checked':''}> Süre dolunca otomatik bitir</label>
+  <div class="row"><button onclick="applyTime()">✅ Uygula</button>
+  <button onclick="closeModal()" style="background:#444">Kapat</button></div>`;
+  $('durTxt').oninput=e=>{e.target.value=autoColon(e.target.value);};
+}
+function applyTime(){ duration=parseDur($('durTxt').value); autoFinish=$('afChk').checked;
+  elapsed=0; running=false; timeUpDone=false; closeModal(); updateTimerText(); saveSession(); }
+function autoColon(v){
+  const d=v.replace(/\D/g,'').slice(0,6);
+  const parts=[];let s=d;
+  while(s.length>2){parts.unshift(s.slice(-2));s=s.slice(0,-2);}
+  if(s.length)parts.unshift(s);
+  return parts.join(':');
+}
+
+/* --- yüzen saat: sürükle-bırak --- */
+(function(){
+  const ft=$('ft'); let dx=0,dy=0,drag=false;
+  const pos=JSON.parse(localStorage.getItem('dijitaloptik_ft_pos')||'null');
+  if(pos){ft.style.left=pos.l+'px';ft.style.top=pos.t+'px';ft.style.right='auto';}
+  ft.addEventListener('pointerdown',e=>{
+    if(e.target.tagName==='BUTTON'||e.target.id==='ftTime')return;
+    drag=true;ft.setPointerCapture(e.pointerId);
+    const r=ft.getBoundingClientRect();dx=e.clientX-r.left;dy=e.clientY-r.top;});
+  ft.addEventListener('pointermove',e=>{ if(!drag)return;
+    let l=e.clientX-dx,t=e.clientY-dy;
+    l=Math.max(4,Math.min(innerWidth-ft.offsetWidth-4,l));
+    t=Math.max(4,Math.min(innerHeight-ft.offsetHeight-4,t));
+    ft.style.left=l+'px';ft.style.top=t+'px';ft.style.right='auto';});
+  ft.addEventListener('pointerup',()=>{ if(!drag)return;drag=false;
+    localStorage.setItem('dijitaloptik_ft_pos',JSON.stringify({l:parseInt(ft.style.left)||10,t:parseInt(ft.style.top)||10}));});
+})();
+
+/* ================= PWA ================= */
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}
+window.addEventListener('offline',()=>flash('🔌 Çevrimdışı: kitaplar açık, AI kapalı'));
+window.addEventListener('online',()=>flash('🌐 Bağlantı geri geldi'));
+
+refreshLib();
+initTicker();
+updateTimerText();
+</script>
+</body>
+</html>
