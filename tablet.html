@@ -606,12 +606,15 @@
     function cancelLP() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
     overlay.addEventListener('pointerdown', e => {
       e.preventDefault();
-      lpPos = [e.clientX, e.clientY];
+      const r = overlay.getBoundingClientRect();
+      lpPos = [e.clientX - r.left, e.clientY - r.top];
       cancelLP();
       lpTimer = setTimeout(() => { lpTimer = null; longPress(lpPos); }, 900);
     });
     overlay.addEventListener('pointermove', e => {
-      if (lpTimer && lpPos && (Math.abs(e.clientX - lpPos[0]) > 12 || Math.abs(e.clientY - lpPos[1]) > 12)) cancelLP();
+      if (!lpTimer || !lpPos) return;
+      const r = overlay.getBoundingClientRect();
+      if (Math.abs(e.clientX - r.left - lpPos[0]) > 12 || Math.abs(e.clientY - r.top - lpPos[1]) > 12) cancelLP();
     }, { passive: true });
     overlay.addEventListener('pointerup', cancelLP);
     overlay.addEventListener('pointercancel', cancelLP);
