@@ -1,0 +1,18 @@
+{
+  "name": "Dijital Optik — Akıllı Test Çözücü",
+  "short_name": "DijitalOptik",
+  "description": "PDF soru kitaplarını akıllı dijital optiğe çevirir: otomatik şık yakalama, yapay zeka ile cevap anahtarı okuma, süre yönetimi ve odak modu.",
+  "id": "./",
+  "start_url": "./tablet.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#121417",
+  "theme_color": "#1c2026",
+  "lang": "tr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
