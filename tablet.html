@@ -860,6 +860,7 @@ Yalnızca geçerli bir JSON nesnesi döndür: {"1":"E","2":"B","28":"C"}`;
     const idbAll = () => idbReq('readonly', s => s.getAll());
     const idbPut = v => idbReq('readwrite', s => s.put(v));
     const idbDel = n => idbReq('readwrite', s => s.delete(n));
+    const idbKeys = () => idbReq('readonly', s => s.getAllKeys());
 
     let saveT = null;
     function saveSession() {
@@ -874,10 +875,14 @@ Yalnızca geçerli bir JSON nesnesi döndür: {"1":"E","2":"B","28":"C"}`;
     function manualSave() { saveSession(); flash('💾 İlerleme kaydedildi'); }
 
     async function refreshLib() {
-      const all = await idbAll();
-      $('lib').innerHTML = '<option value="">— Kitaplar —</option>' +
-        all.map(b => `<option ${b.name === book ? 'selected' : ''}>${b.name}</option>`).join('');
-    }
+        const keys = await idbKeys();
+        const sel = $('lib'); sel.innerHTML = '';
+        const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '— Kitaplar —'; sel.appendChild(o0);
+        for (const k of keys) {
+          const o = document.createElement('option'); o.value = k; o.textContent = k;
+          if (k === book) o.selected = true; sel.appendChild(o);
+        }
+      }
 
     async function loadBook(name) {
       if (!name) return;
@@ -892,9 +897,12 @@ Yalnızca geçerli bir JSON nesnesi döndür: {"1":"E","2":"B","28":"C"}`;
       } catch (err) { flash('❌ ' + err.message, 10000); }
     }
     async function delBook() {
-      if (!book) return; await idbDel(book);
-      book = ''; pdfDoc = null; jsonData = []; lockedQs = new Set(); evaluated = false; refreshLib(); flash('🗑 Kitap silindi');
-    }
+        const name = $('lib').value || book; if (!name) return;
+        try { await idbDel(name); } catch (e) { flash('❌ Silinemedi: ' + e.message, 8000); return; }
+        if (book === name) { book = ''; pdfDoc = null; jsonData = []; lockedQs = new Set(); evaluated = false; }
+        $('lib').value = '';
+        refreshLib(); flash('🗑 Kitap silindi');
+      }
 
     /* ================= YÜZEN SAAT ================= */
     let duration = 0, autoFinish = false, running = false, tickId = null, timeUpDone = false, wakeLock = null;
