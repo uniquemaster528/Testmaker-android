@@ -1,8 +1,12 @@
-const CACHE='dijitaloptik-v3';
-const CORE=['./tablet.html','./index.html','./manifest.json','./icon.svg','./icon-512.png'];
+const CACHE='dijitaloptik-v4';
+const CORE=['./tablet.html','./manifest.json','./icon-512.png'];
 
 self.addEventListener('install',e=>{
-  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c=>Promise.all(CORE.map(u=>c.add(u).catch(()=>{}))))
+      .then(()=>self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate',e=>{
@@ -14,7 +18,6 @@ self.addEventListener('activate',e=>{
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET')return;
 
-  /* Sayfa: ASLA önbellekten bayat çekme (no-store), düşerse offline kopya */
   if(e.request.mode==='navigate'){
     e.respondWith(
       fetch(e.request,{cache:'no-store'}).then(r=>{
@@ -26,7 +29,6 @@ self.addEventListener('fetch',e=>{
     return;
   }
 
-  /* pdf.js CDN vb.: önce önbellek, yoksa ağ+doldur */
   e.respondWith(
     caches.match(e.request).then(hit=>
       hit || fetch(e.request).then(r=>{
